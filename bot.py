@@ -4,8 +4,12 @@
 import os
 import json
 from pathlib import Path
+from typing import Dict, List, Optional
+
 import discord
 from discord.ext import commands
+from discord import app_commands
+
 import asyncio
 import random
 import difflib
@@ -15,18 +19,17 @@ from collections import defaultdict
 # إعداد التوكن و الإنتنتس
 # ==============================
 
-# التوكن من متغير بيئة (مهم لـ Railway)
-BOT_TOKEN = os.getenv("TOKEN")
+BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not BOT_TOKEN:
     raise RuntimeError(
-        "❌ متغيّر البيئة TOKEN غير موجود.\n"
-        "في Railway أو على جهازك، اضبط متغيّر البيئة TOKEN على توكن البوت."
+        "❌ متغيّر البيئة DISCORD_TOKEN غير موجود.\n"
+        "اضبطه في Railway أو على جهازك على توكن البوت."
     )
 
 intents = discord.Intents.default()
-intents.message_content = True  # مهم لقراءة محتوى الرسائل
-intents.members = True          # مفيد لو استخدمنا معلومات الأعضاء لاحقاً
+intents.message_content = True
+intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
@@ -37,18 +40,17 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 SCORES_FILE = Path("scores.json")
 QUESTIONS_FILE = Path("questions.json")
 
-scores: dict[int, int] = defaultdict(int)
-questions: list[dict] = []  # كل عنصر: {"question": str, "answers": [str, ...]}
-
+scores: Dict[int, int] = defaultdict(int)
+questions: List[Dict] = []
 
 # ==============================
-# دوال تحميل / حفظ النقاط
+# تحميل / حفظ النقاط
 # ==============================
 
-def load_scores():
+def load_scores() -> None:
     global scores
     if not SCORES_FILE.exists():
-        print("⚠️ لا يوجد ملف scores.json، سيتم إنشاؤه عند أول حفظ نقاط.")
+        print("⚠️ لا يوجد ملف scores.json، سيتم إنشاؤه لاحقاً.")
         return
 
     try:
@@ -62,30 +64,28 @@ def load_scores():
             except ValueError:
                 print(f"⚠️ تجاهل قيمة غير صحيحة في scores.json: {user_id_str} -> {points}")
 
-        print(f"✅ تم تحميل {len(scores)} لاعب/لاعبة من scores.json")
+        print(f"✅ تم تحميل {len(scores)} لاعب من scores.json")
     except Exception as e:
         print(f"❌ خطأ أثناء قراءة scores.json: {e}")
 
 
-def save_scores():
+def save_scores() -> None:
     try:
         data = {str(uid): points for uid, points in scores.items()}
         with SCORES_FILE.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-
         print("💾 تم حفظ النقاط في scores.json")
     except Exception as e:
         print(f"❌ خطأ أثناء حفظ scores.json: {e}")
 
-
 # ==============================
-# دوال تحميل / حفظ الأسئلة
+# تحميل / حفظ الأسئلة
 # ==============================
 
-def load_questions():
+def load_questions() -> None:
     global questions
     if not QUESTIONS_FILE.exists():
-        print("⚠️ لا يوجد ملف questions.json، تأكد من إنشائه وإضافة أسئلة.")
+        print("⚠️ لا يوجد ملف questions.json، تأكد من إنشائه.")
         questions = []
         return
 
@@ -93,11 +93,10 @@ def load_questions():
         with QUESTIONS_FILE.open("r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # تأكد أن البيانات قائمة
         if isinstance(data, list):
             questions = data
         else:
-            print("❌ شكل questions.json غير صحيح، يجب أن يكون قائمة (list).")
+            print("❌ شكل questions.json غير صحيح (يجب أن يكون قائمة).")
             questions = []
 
         print(f"✅ تم تحميل {len(questions)} سؤال من questions.json")
@@ -106,8 +105,7 @@ def load_questions():
         questions = []
 
 
-def save_questions():
-    """حفظ الأسئلة في questions.json (يُستخدم مع الأوامر الإدارية)."""
+def save_questions() -> None:
     try:
         with QUESTIONS_FILE.open("w", encoding="utf-8") as f:
             json.dump(questions, f, ensure_ascii=False, indent=2)
@@ -115,30 +113,26 @@ def save_questions():
     except Exception as e:
         print(f"❌ خطأ أثناء حفظ questions.json: {e}")
 
-
 # ==============================
-# دوال مساعدة منطقية
+# دوال مساعدة
 # ==============================
 
 def normalize_text(text: str) -> str:
     return text.strip().lower()
 
 
-def is_answer_correct(user_answer: str, valid_answers: list[str], threshold: float = 0.75) -> bool:
+def is_answer_correct(user_answer: str, valid_answers: List[str], threshold: float = 0.75) -> bool:
     user_answer_norm = normalize_text(user_answer)
 
     for ans in valid_answers:
         ans_norm = normalize_text(ans)
 
-        # تطابق مباشر
         if user_answer_norm == ans_norm:
             return True
 
-        # احتواء/جزء من
         if ans_norm in user_answer_norm or user_answer_norm in ans_norm:
             return True
 
-        # تشابه تقريبي
         similarity = difflib.SequenceMatcher(None, user_answer_norm, ans_norm).ratio()
         if similarity >= threshold:
             return True
@@ -146,7 +140,7 @@ def is_answer_correct(user_answer: str, valid_answers: list[str], threshold: flo
     return False
 
 
-def format_leaderboard(scores_dict: dict[int, int], guild: discord.Guild) -> str:
+def format_leaderboard(scores_dict: Dict[int, int], guild: discord.Guild) -> str:
     if not scores_dict:
         return "🚫 لا يوجد أي مشاركات حتى الآن."
 
@@ -162,12 +156,74 @@ def format_leaderboard(scores_dict: dict[int, int], guild: discord.Guild) -> str
 
     return "🏆 **ترتيب المشاركين في تحدي الشتاء:**\n\n" + "\n".join(lines)
 
-
 # ==============================
 # حالة التحديات النشطة
 # ==============================
 
-active_challenges: dict[int, bool] = {}  # channel_id -> bool
+active_challenges: Dict[int, bool] = {}  # channel_id -> bool
+
+# ==============================
+# منطق التحدي (مشترك لـ slash + text)
+# ==============================
+
+async def start_winter_challenge(channel: discord.TextChannel, user: discord.abc.User) -> None:
+    channel_id = channel.id
+
+    if active_challenges.get(channel_id, False):
+        await channel.send("❄️ فيه سؤال شغال حالياً في هذه القناة، جاوب عليه أولاً قبل ما نبدأ سؤال جديد.")
+        return
+
+    if not questions:
+        await channel.send("⚠️ لا توجد أسئلة حالياً. راجع ملف questions.json أو استخدم أوامر الإدارة.")
+        return
+
+    active_challenges[channel_id] = True
+
+    question_data = random.choice(questions)
+    question_text = question_data.get("question", "سؤال غير معروف 🤔")
+    valid_answers = question_data.get("answers", [])
+
+    await channel.send(
+        f"❄️ **تحدي الشتاء بدأ!**\n"
+        f"يا {user.mention} جاوب على السؤال التالي خلال **30 ثانية**:\n\n"
+        f"🧠 **السؤال:** {question_text}"
+    )
+
+    def check(m: discord.Message) -> bool:
+        return (
+            m.channel.id == channel_id
+            and m.author.id == user.id
+            and not m.author.bot
+        )
+
+    try:
+        reply: discord.Message = await bot.wait_for("message", timeout=30.0, check=check)
+    except asyncio.TimeoutError:
+        await channel.send(
+            f"⌛ انتهى الوقت يا {user.mention}! تأخرت في الإجابة.\n"
+            "تقدر تكتب `ابدا تحدي الشتاء` أو تستخدم `/winter_start` عشان تحاول مرة ثانية."
+        )
+        active_challenges[channel_id] = False
+        return
+
+    user_answer = reply.content
+
+    if is_answer_correct(user_answer, valid_answers):
+        scores[user.id] += 1
+        save_scores()
+        points = scores[user.id]
+        await channel.send(
+            f"✅ إجابة **صحيحة** يا {user.mention}! 🎉\n"
+            f"رصيدك الآن: **{points}** نقطة."
+        )
+    else:
+        correct_example = valid_answers[0] if valid_answers else "—"
+        await channel.send(
+            f"❌ إجابة **غير صحيحة** يا {user.mention}.\n"
+            f"مثال لإجابة صحيحة: **{correct_example}**"
+        )
+
+    active_challenges[channel_id] = False
 
 # ==============================
 # EVENTS
@@ -177,132 +233,214 @@ active_challenges: dict[int, bool] = {}  # channel_id -> bool
 async def on_ready():
     load_scores()
     load_questions()
+
+    try:
+        # مزامنة Slash Commands مع ديسكورد
+        await bot.tree.sync()
+        print("✅ تم مزامنة Slash Commands.")
+    except Exception as e:
+        print(f"⚠️ لم يتم مزامنة Slash Commands: {e}")
+
     print(f"✅ تم تسجيل الدخول كبوت: {bot.user} (ID: {bot.user.id})")
     print("جاهز لتحدي الشتاء! ❄️")
 
 
 @bot.event
 async def on_message(message: discord.Message):
-    # تجاهل البوت نفسه
     if message.author.bot:
         return
 
     content = message.content.strip()
 
-    # ==========================
-    # بدء التحدي: "ابدا تحدي الشتاء"
-    # ==========================
     if content == "ابدا تحدي الشتاء":
-        channel_id = message.channel.id
+        if isinstance(message.channel, discord.TextChannel):
+            await start_winter_challenge(message.channel, message.author)
 
-        if active_challenges.get(channel_id, False):
-            await message.channel.send("❄️ فيه سؤال شغال حالياً في هذه القناة، جاوب عليه أولاً قبل ما نبدأ سؤال جديد.")
-            return
-
-        if not questions:
-            await message.channel.send("⚠️ لا توجد أسئلة حالياً. راجع ملف questions.json أو استخدم أوامر الإدارة.")
-            return
-
-        active_challenges[channel_id] = True
-
-        question_data = random.choice(questions)
-        question_text = question_data.get("question", "سؤال غير معروف 🤔")
-        valid_answers = question_data.get("answers", [])
-
-        await message.channel.send(
-            f"❄️ **تحدي الشتاء بدأ!**\n"
-            f"يا {message.author.mention} جاوب على السؤال التالي خلال **30 ثانية**:\n\n"
-            f"🧠 **السؤال:** {question_text}"
-        )
-
-        def check(m: discord.Message) -> bool:
-            return (
-                m.channel.id == message.channel.id
-                and m.author.id == message.author.id
-                and not m.author.bot
-            )
-
-        try:
-            reply: discord.Message = await bot.wait_for("message", timeout=30.0, check=check)
-        except asyncio.TimeoutError:
-            await message.channel.send(
-                f"⌛ انتهى الوقت يا {message.author.mention}! تأخرت في الإجابة.\n"
-                "تقدر تكتب `ابدا تحدي الشتاء` عشان تحاول مرة ثانية."
-            )
-            active_challenges[channel_id] = False
-            return
-
-        user_answer = reply.content
-
-        if is_answer_correct(user_answer, valid_answers):
-            scores[message.author.id] += 1
-            save_scores()
-            points = scores[message.author.id]
-            await message.channel.send(
-                f"✅ إجابة **صحيحة** يا {message.author.mention}! 🎉\n"
-                f"رصيدك الآن: **{points}** نقطة."
-            )
-        else:
-            correct_example = valid_answers[0] if valid_answers else "—"
-            await message.channel.send(
-                f"❌ إجابة **غير صحيحة** يا {message.author.mention}.\n"
-                f"مثال لإجابة صحيحة: **{correct_example}**"
-            )
-
-        active_challenges[channel_id] = False
-
-    # ==========================
-    # طلب الترتيب: "ترتيب؟"
-    # ==========================
     elif content == "ترتيب؟":
-        leaderboard_text = format_leaderboard(scores, message.guild)
-        await message.channel.send(leaderboard_text)
+        if message.guild is not None:
+            leaderboard_text = format_leaderboard(scores, message.guild)
+            await message.channel.send(leaderboard_text)
+        else:
+            await message.channel.send("هذا الأمر يعمل داخل السيرفر فقط.")
 
-    # مهم عشان تشتغل أوامر الـ commands
     await bot.process_commands(message)
 
+# ==============================
+# Slash Commands ( / )
+# ==============================
+
+# /winter_start
+@bot.tree.command(name="winter_start", description="ابدأ سؤال عشوائي من تحدي الشتاء")
+async def winter_start(interaction: discord.Interaction):
+    if interaction.channel is None or not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message("هذا الأمر يعمل في قنوات النص داخل السيرفر فقط.", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    await start_winter_challenge(interaction.channel, interaction.user)
+
+# /winter_rank
+@bot.tree.command(name="winter_rank", description="عرض ترتيب المشاركين في تحدي الشتاء")
+async def winter_rank(interaction: discord.Interaction):
+    if interaction.guild is None:
+        await interaction.response.send_message("هذا الأمر يعمل داخل السيرفر فقط.", ephemeral=True)
+        return
+
+    leaderboard_text = format_leaderboard(scores, interaction.guild)
+    await interaction.response.send_message(leaderboard_text)
+
+# -------- أوامر إدارية Slash --------
+
+def is_admin(interaction: discord.Interaction) -> bool:
+    return interaction.user.guild_permissions.administrator if interaction.guild else False
+
+# /winter_add_question
+@bot.tree.command(name="winter_add_question", description="إضافة سؤال جديد لتحدي الشتاء (أدمن فقط)")
+@app_commands.describe(
+    question="نص السؤال",
+    answers="كل الإجابات الصحيحة مفصولة بـ ; مثال: الرياض;رياض"
+)
+async def winter_add_question(interaction: discord.Interaction, question: str, answers: str):
+    if not is_admin(interaction):
+        await interaction.response.send_message("هذا الأمر للأدمن فقط.", ephemeral=True)
+        return
+
+    answers_list = [a.strip() for a in answers.split(";") if a.strip()]
+
+    if not question or not answers_list:
+        await interaction.response.send_message("تأكد إنك كتبت السؤال والإجابات بشكل صحيح.", ephemeral=True)
+        return
+
+    new_q = {"question": question, "answers": answers_list}
+    questions.append(new_q)
+    save_questions()
+
+    await interaction.response.send_message(
+        f"✅ تم إضافة السؤال:\n**{question}**\n"
+        f"عدد الإجابات المحتملة: **{len(answers_list)}**",
+        ephemeral=True
+    )
+
+# /winter_list_questions
+@bot.tree.command(name="winter_list_questions", description="عرض قائمة الأسئلة (أدمن فقط)")
+async def winter_list_questions(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("هذا الأمر للأدمن فقط.", ephemeral=True)
+        return
+
+    if not questions:
+        await interaction.response.send_message("⚠️ لا توجد أسئلة حالياً.", ephemeral=True)
+        return
+
+    lines = []
+    for idx, q in enumerate(questions, start=1):
+        qt = q.get("question", "—")
+        lines.append(f"{idx}. {qt}")
+
+    msg = "\n".join(lines)
+    if len(msg) > 1900:
+        await interaction.response.send_message(
+            "عدد الأسئلة كبير، الأفضل تعدّلها مباشرة من ملف `questions.json`.",
+            ephemeral=True
+        )
+    else:
+        await interaction.response.send_message("📋 **قائمة الأسئلة:**\n" + msg, ephemeral=True)
+
+# /winter_delete_question
+@bot.tree.command(name="winter_delete_question", description="حذف سؤال برقم من القائمة (أدمن فقط)")
+@app_commands.describe(index="رقم السؤال كما يظهر في قائمة الأسئلة (1، 2، 3، ...)")
+async def winter_delete_question(interaction: discord.Interaction, index: int):
+    if not is_admin(interaction):
+        await interaction.response.send_message("هذا الأمر للأدمن فقط.", ephemeral=True)
+        return
+
+    if not questions:
+        await interaction.response.send_message("⚠️ لا توجد أسئلة لحذفها.", ephemeral=True)
+        return
+
+    if index < 1 or index > len(questions):
+        await interaction.response.send_message("⚠️ رقم السؤال غير صحيح.", ephemeral=True)
+        return
+
+    removed = questions.pop(index - 1)
+    save_questions()
+
+    await interaction.response.send_message(
+        f"🗑 تم حذف السؤال:\n**{removed.get('question', '—')}**",
+        ephemeral=True
+    )
+
+# /winter_reload_questions
+@bot.tree.command(name="winter_reload_questions", description="إعادة تحميل questions.json من جديد (أدمن فقط)")
+async def winter_reload_questions(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("هذا الأمر للأدمن فقط.", ephemeral=True)
+        return
+
+    load_questions()
+    await interaction.response.send_message(
+        f"✅ تم إعادة تحميل الأسئلة. العدد الحالي: **{len(questions)}** سؤال.",
+        ephemeral=True
+    )
+
+# /winter_reset_scores
+@bot.tree.command(name="winter_reset_scores", description="تصفير النقاط (الكل أو شخص واحد) (أدمن فقط)")
+@app_commands.describe(
+    user="اختياري: مستخدم معيّن لتصفير نقاطه فقط. لو تركته فاضي يصفر نقاط الجميع."
+)
+async def winter_reset_scores(interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    if not is_admin(interaction):
+        await interaction.response.send_message("هذا الأمر للأدمن فقط.", ephemeral=True)
+        return
+
+    global scores
+
+    if user is None:
+        scores = defaultdict(int)
+        save_scores()
+        await interaction.response.send_message("✅ تم تصفير نقاط جميع المشاركين.", ephemeral=True)
+    else:
+        if user.id in scores:
+            scores[user.id] = 0
+            save_scores()
+            await interaction.response.send_message(
+                f"✅ تم تصفير نقاط {user.mention}.",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "⚠️ هذا المستخدم ما عنده نقاط مسجلة.",
+                ephemeral=True
+            )
 
 # ==============================
-# أوامر إدارية (للأدمن فقط)
+# أوامر Prefix (القديمة) للإدارة
 # ==============================
 
-# إضافة سؤال جديد: !اضف_سؤال السؤال | جواب1 ; جواب2 ; جواب3
 @bot.command(name="اضف_سؤال")
 @commands.has_permissions(administrator=True)
-async def add_question(ctx: commands.Context, *, data: str):
+async def add_question_cmd(ctx: commands.Context, *, data: str):
     """
-    مثال الاستخدام:
+    مثال:
     !اضف_سؤال ما هي عاصمة قطر؟ | الدوحة ; دوحة
     """
-    try:
-        if "|" not in data:
-            await ctx.send("⚠️ الصيغة غير صحيحة.\nاستخدم: `!اضف_سؤال السؤال | جواب1 ; جواب2 ; جواب3`")
-            return
+    if "|" not in data:
+        await ctx.send("⚠️ الصيغة غير صحيحة.\nاستخدم: `!اضف_سؤال السؤال | جواب1 ; جواب2 ; ...`")
+        return
 
-        question_text, answers_part = map(str.strip, data.split("|", 1))
+    question_text, answers_part = map(str.strip, data.split("|", 1))
+    answers_list = [a.strip() for a in answers_part.split(";") if a.strip()]
 
-        if not question_text or not answers_part:
-            await ctx.send("⚠️ تأكد إن السؤال والإجابات مو فاضية.")
-            return
+    if not question_text or not answers_list:
+        await ctx.send("⚠️ تأكد من السؤال والإجابات.")
+        return
 
-        answers = [a.strip() for a in answers_part.split(";") if a.strip()]
-        if not answers:
-            await ctx.send("⚠️ لازم تضيف إجابة واحدة على الأقل.")
-            return
-
-        new_q = {"question": question_text, "answers": answers}
-        questions.append(new_q)
-        save_questions()
-
-        await ctx.send(
-            f"✅ تم إضافة السؤال:\n**{question_text}**\n"
-            f"مع {len(answers)} إجابة/إجابات محتملة."
-        )
-    except Exception as e:
-        await ctx.send(f"❌ صار خطأ أثناء إضافة السؤال: `{e}`")
+    new_q = {"question": question_text, "answers": answers_list}
+    questions.append(new_q)
+    save_questions()
+    await ctx.send(f"✅ تم إضافة السؤال:\n**{question_text}**")
 
 
-# عرض قائمة مختصرة بالأسئلة: !الأسئلة
 @bot.command(name="الأسئلة")
 @commands.has_permissions(administrator=True)
 async def list_questions_cmd(ctx: commands.Context):
@@ -315,20 +453,18 @@ async def list_questions_cmd(ctx: commands.Context):
         qt = q.get("question", "—")
         lines.append(f"{idx}. {qt}")
 
-    # لو كثير، نقسمها
     msg = "\n".join(lines)
     if len(msg) > 1900:
-        await ctx.send("⚠️ عدد الأسئلة كبير، عدّل مباشرة من ملف `questions.json`.")
+        await ctx.send("⚠️ عدد الأسئلة كبير، عدّل من `questions.json` مباشرة.")
     else:
         await ctx.send("📋 **قائمة الأسئلة:**\n" + msg)
 
 
-# حذف سؤال برقم: !حذف_سؤال 3
 @bot.command(name="حذف_سؤال")
 @commands.has_permissions(administrator=True)
-async def delete_question(ctx: commands.Context, index: int):
+async def delete_question_cmd(ctx: commands.Context, index: int):
     if not questions:
-        await ctx.send("⚠️ لا توجد أسئلة لحذفها.")
+        await ctx.send("⚠️ لا توجد أسئلة.")
         return
 
     if index < 1 or index > len(questions):
@@ -337,11 +473,9 @@ async def delete_question(ctx: commands.Context, index: int):
 
     removed = questions.pop(index - 1)
     save_questions()
-
     await ctx.send(f"🗑 تم حذف السؤال:\n**{removed.get('question', '—')}**")
 
 
-# إعادة تحميل الأسئلة من questions.json: !إعادة_تحميل_الأسئلة
 @bot.command(name="إعادة_تحميل_الأسئلة")
 @commands.has_permissions(administrator=True)
 async def reload_questions_cmd(ctx: commands.Context):
@@ -349,16 +483,12 @@ async def reload_questions_cmd(ctx: commands.Context):
     await ctx.send(f"✅ تم إعادة تحميل الأسئلة. العدد الحالي: **{len(questions)}** سؤال.")
 
 
-# تصفير نقاط شخص أو الكل
-# !تصفير_النقاط  (يصفّر كل المشاركين)
-# !تصفير_النقاط @مستخدم
 @bot.command(name="تصفير_النقاط")
 @commands.has_permissions(administrator=True)
-async def reset_scores_cmd(ctx: commands.Context, member: discord.Member | None = None):
+async def reset_scores_cmd(ctx: commands.Context, member: Optional[discord.Member] = None):
     global scores
 
     if member is None:
-        # تصفير الكل
         scores = defaultdict(int)
         save_scores()
         await ctx.send("✅ تم تصفير نقاط جميع المشاركين.")
@@ -368,26 +498,7 @@ async def reset_scores_cmd(ctx: commands.Context, member: discord.Member | None 
             save_scores()
             await ctx.send(f"✅ تم تصفير نقاط {member.mention}.")
         else:
-            await ctx.send("⚠️ هذا المستخدم ما عنده نقاط مسجلة.")
-
-
-# رسالة مساعدة بسيطة: !هلب
-@bot.command(name="/Help")
-async def help_cmd(ctx: commands.Context):
-    await ctx.send(
-        "**قائمة الأوامر:**\n\n"
-        "🧊 أوامر اللاعبين:\n"
-        "`ابدا تحدي الشتاء` — يبدأ لك سؤال عشوائي من تحدي الشتاء.\n"
-        "`ترتيب؟` — يعرض ترتيب المشاركين بالنقاط.\n\n"
-        "🛠 أوامر إدارية (تحتاج أدمن):\n"
-        "`!اضف_سؤال السؤال | جواب1 ; جواب2 ; ...`\n"
-        "`!الأسئلة` — عرض قائمة الأسئلة بأرقامها.\n"
-        "`!حذف_سؤال رقم` — حذف سؤال برقم.\n"
-        "`!إعادة_تحميل_الأسئلة` — إعادة قراءة questions.json`\n"
-        "`!تصفير_النقاط` — تصفير نقاط الجميع.\n"
-        "`!تصفير_النقاط @مستخدم` — تصفير نقاط شخص واحد."
-    )
-
+            await ctx.send("⚠️ هذا المستخدم ما عنده نقاط.")
 
 # ==============================
 # تشغيل البوت
@@ -395,5 +506,3 @@ async def help_cmd(ctx: commands.Context):
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-
-
