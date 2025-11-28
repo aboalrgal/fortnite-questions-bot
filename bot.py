@@ -19,11 +19,11 @@ from collections import defaultdict
 # إعداد التوكن و الإنتنتس
 # ==============================
 
-BOT_TOKEN = os.getenv("DISCORD_TOKEN")
+BOT_TOKEN = os.getenv("TOKEN")
 
 if not BOT_TOKEN:
     raise RuntimeError(
-        "❌ متغيّر البيئة DISCORD_TOKEN غير موجود.\n"
+        "❌ متغيّر البيئة TOKEN غير موجود.\n"
         "اضبطه في Railway أو على جهازك على توكن البوت."
     )
 
@@ -506,3 +506,4 @@ async def reset_scores_cmd(ctx: commands.Context, member: Optional[discord.Membe
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+
