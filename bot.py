@@ -1,5 +1,5 @@
 # bot.py
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 
 
 import os
 import json
@@ -506,4 +506,5 @@ async def reset_scores_cmd(ctx: commands.Context, member: Optional[discord.Membe
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+
 
