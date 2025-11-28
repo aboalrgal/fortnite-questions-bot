@@ -372,7 +372,7 @@ async def reset_scores_cmd(ctx: commands.Context, member: discord.Member | None 
 
 
 # رسالة مساعدة بسيطة: !هلب
-@bot.command(name="Help")
+@bot.command(name="/Help")
 async def help_cmd(ctx: commands.Context):
     await ctx.send(
         "**قائمة الأوامر:**\n\n"
@@ -395,4 +395,5 @@ async def help_cmd(ctx: commands.Context):
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+
 
