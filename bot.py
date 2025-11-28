@@ -16,12 +16,12 @@ from collections import defaultdict
 # ==============================
 
 # التوكن من متغير بيئة (مهم لـ Railway)
-BOT_TOKEN = os.getenv("DISCORD_TOKEN")
+BOT_TOKEN = os.getenv("TOKEN")
 
 if not BOT_TOKEN:
     raise RuntimeError(
-        "❌ متغيّر البيئة DISCORD_TOKEN غير موجود.\n"
-        "في Railway أو على جهازك، اضبط متغيّر البيئة DISCORD_TOKEN على توكن البوت."
+        "❌ متغيّر البيئة TOKEN غير موجود.\n"
+        "في Railway أو على جهازك، اضبط متغيّر البيئة TOKEN على توكن البوت."
     )
 
 intents = discord.Intents.default()
@@ -395,3 +395,4 @@ async def help_cmd(ctx: commands.Context):
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+
